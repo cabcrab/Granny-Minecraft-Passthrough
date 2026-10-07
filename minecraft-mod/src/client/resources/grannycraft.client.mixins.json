@@ -1,0 +1,7 @@
+{
+	"required": true,
+	"package": "grannycraft.client.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"client": ["AbstractClientPlayerMixin", "CameraMixin", "ClientLevelMixin", "EntityPickMixin", "FirstPersonItemMixin", "FogRendererMixin", "GameRendererMixin", "GlCommandEncoderMixin", "KeyMappingAccessor", "LivingEntityMixin", "LocalPlayerMixin", "MouseHandlerMixin", "ScreenEffectMixin", "ToastManagerMixin"],
+	"injectors": { "defaultRequire": 1 }
+}

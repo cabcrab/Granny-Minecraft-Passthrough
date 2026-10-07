@@ -1,0 +1,24 @@
+{
+	"schemaVersion": 1,
+	"id": "grannycraft",
+	"version": "${version}",
+	"name": "GrannyCraft",
+	"description": "Runs alongside Granny Legacy: Granny's camera drives Minecraft's, her house becomes invisible collision, Granny and Grandpa can be fought with Minecraft weapons, and Minecraft's picture (colour + depth) is composited into Granny's frame. Based on universal-modder's minecraft-gta5-passthrough (MIT).",
+	"authors": ["GrannyCraft (personal project)", "passthrough core: rehan and universal-modder contributors (MIT)"],
+	"license": "MIT",
+	"environment": "*",
+	"entrypoints": {
+		"main": ["grannycraft.GrannyCraft"],
+		"client": ["grannycraft.client.GrannyCraftClient"]
+	},
+	"mixins": [
+		"grannycraft.mixins.json",
+		{ "config": "grannycraft.client.mixins.json", "environment": "client" }
+	],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}

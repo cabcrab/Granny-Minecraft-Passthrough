@@ -1,0 +1,24 @@
+# made by Setup.bat / Play.bat (game copy, launcher, Java, downloads) - never commit
+/game/
+/launcher/
+/java/
+/downloads/
+/bin/
+/.cache/
+
+# build outputs
+granny-plugin/obj/
+granny-plugin/bin/
+granny-native/*.dll
+granny-native/*.lib
+granny-native/*.exp
+granny-native/*.obj
+granny-native/*.pdb
+minecraft-mod/.gradle/
+minecraft-mod/build/
+minecraft-mod/run/
+
+*.log
+.vs/
+.idea/
+.vscode/
