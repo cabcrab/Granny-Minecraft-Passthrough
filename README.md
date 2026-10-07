@@ -31,33 +31,46 @@ Minecraft's picture is blended into Granny's house, so you play Granny with Stev
 
 - Windows 10/11, 64-bit, and a GPU that runs both games at once
 - **Granny Legacy** on Steam (Steam must be running while you play)
-- **Minecraft: Java Edition**, owned on a Microsoft account
-- About 3 GB of free disk space and an internet connection for the setup
+- **Minecraft: Java Edition 26.3**, in the launcher you already use (no Fabric install needed, Setup.bat does it)
+- About 2 GB of free disk space and an internet connection for the setup
 
 ## Install
 
-1. Download **`Granny-Minecraft-Passthrough-0.1.0.zip`** from [Releases](../../releases) and extract it anywhere (for example to your
-   Desktop).
+1. Download **`Granny-Minecraft-Passthrough-0.1.1.zip`** from [Releases](../../releases) and extract it anywhere (for
+   example to your Desktop).
 2. Double-click **`Setup.bat`**. It finds Granny Legacy in your Steam libraries (or asks you for its folder) and
-   prepares everything.
-3. Double-click **`Play.bat`**. The first time, Prism Launcher opens: click through its quick setup, **sign in with
-   your Microsoft account**, and Minecraft is downloaded (a few minutes). Minecraft starts first, then Granny Legacy.
-   Press Play in Granny.
+   asks how you start Minecraft:
+   - **1 = the launcher you already use** (recommended). Setup adds a Minecraft version called
+     **`Granny-Minecraft-Passthrough`** (Fabric for 26.3) to your `.minecraft` folder. If your Minecraft is not in the
+     usual place (`%APPDATA%\.minecraft`), it asks you to pick the folder.
+   - **2 = a portable Prism Launcher** inside this folder, if you don't have a launcher. You sign in with your
+     Microsoft account.
+3. Double-click **`Play.bat`**.
+   - **Option 1:** open your launcher and play the version **`Granny-Minecraft-Passthrough`**. In the official
+     Minecraft Launcher it is the installation *Granny Minecraft Passthrough*; in other launchers, pick it from the
+     version list. Granny Legacy starts by itself as soon as Minecraft is running.
+   - **Option 2:** Prism opens by itself. The first time, click through its quick setup and sign in; Minecraft is then
+     downloaded (a few minutes).
 
-**Everything stays inside the extracted folder.** Nothing outside it is installed or changed:
+   Then press Play in Granny.
 
-| Folder | What it is |
+### What Setup.bat changes
+
+| Where | What |
 |---|---|
 | `game\Granny Legacy` | a **copy** of your Granny Legacy with BepInEx and the GrannyCraft plugin. Your Steam install is only read, never changed. |
-| `launcher` | Prism Launcher in portable mode: your login, settings and the "GrannyCraft" Minecraft instance (26.3 + Fabric) |
-| `java` | Java 25 for that Minecraft |
-| `downloads` | the downloaded files. You can delete it after setup. |
+| `minecraft\` (option 1) | the mods (GrannyCraft + Fabric API), plus worlds and settings when you use the official launcher |
+| `.minecraft\versions\Granny-Minecraft-Passthrough` (option 1) | the version you pick in your launcher. It loads mods **only** from this folder's `minecraft\mods`, so your other versions, mods and worlds are not affected. |
+| `.minecraft\launcher_profiles.json` (option 1) | one extra installation, "Granny Minecraft Passthrough" (a backup of the file is kept next to it) |
+| `launcher\`, `java\` (option 2) | Prism Launcher (portable) with its "GrannyCraft" instance, and Java 25 |
+| `downloads\` | the downloaded files. You can delete it after setup. |
 
 Everything is downloaded from its official source and checked against a fixed SHA-256 (see `scripts\common.ps1`).
-Your normal Minecraft (`.minecraft`, the official launcher, other launchers) is never touched.
+While it runs, the mod lowers some video settings (vsync, clouds, view bobbing, music...). Your own settings come back
+when Minecraft closes.
 
-**Uninstall:** delete the extracted folder. (Granny Legacy keeps its own settings and saves in the usual place, as
-it always does, shared with your Steam install.)
+**Uninstall:** run **`Uninstall.bat`** (it removes the version and the installation from `.minecraft`), then delete
+the folder. Granny Legacy keeps its own settings and saves in the usual place, as it always does.
 
 ## Controls
 
@@ -90,14 +103,19 @@ regrow time (`HouseRegenSeconds`).
   which makes it easier to see what is happening.
 - **Windows protected your PC / SmartScreen:** the .bat files are plain text scripts. Open them with Notepad to check
   them, then choose *More info, Run anyway*.
-- Logs: `game\Granny Legacy\BepInEx\LogOutput.log` and `launcher\instances\GrannyCraft\minecraft\logs\latest.log`.
+- **The version is missing from my launcher, or it says Minecraft 26.3 is missing:** start plain Minecraft **26.3** once
+  in that launcher (so it downloads it), close it, then restart the launcher. If your Minecraft folder is not
+  `%APPDATA%\.minecraft`, run `Setup.bat -MinecraftDir "D:\path\to\.minecraft"`.
+- **Switch between option 1 and 2:** `Setup.bat -Prism` or `Setup.bat -MinecraftDir "<your .minecraft>"`.
+- Logs: `game\Granny Legacy\BepInEx\LogOutput.log`, and Minecraft's `logs\latest.log` (in `minecraft\` with the
+  official launcher, `.minecraft\` with other launchers, `launcher\instances\GrannyCraft\minecraft\` with Prism).
 
-## Using another launcher
+## Installing the Minecraft mod by hand
 
-The Minecraft side is a normal Fabric mod. In any launcher, use a **separate profile or game directory** with
-Minecraft **26.3**, **Fabric Loader 0.19.5**, [Fabric API](https://modrinth.com/mod/fabric-api) 0.161.0+26.3 and
-`bin\grannycraft-0.1.0.jar` in its `mods` folder. The mod changes some video options and opens its own empty
-"GrannyCraft" world automatically, so don't use it in your main profile. You still need Setup.bat for the Granny side.
+The Minecraft side is a normal Fabric mod, if you prefer to set it up yourself: Minecraft **26.3**, **Fabric Loader
+0.19.5**, [Fabric API](https://modrinth.com/mod/fabric-api) 0.161.0+26.3 and `bin\grannycraft-0.1.1.jar` in the mods
+folder. Use it in a profile of its own: when Minecraft starts, the mod opens its own empty "grannycraft" world and
+replaces the inventory with the hotbar only. You still need Setup.bat for the Granny side.
 
 ## How it works
 

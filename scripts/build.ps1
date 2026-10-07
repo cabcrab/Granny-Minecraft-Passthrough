@@ -35,6 +35,9 @@ Copy-Item "$Root\minecraft-mod\build\libs\$ModJar" $Bin -Force
 
 if ($Install) {
     Copy-Item (Join-Path $Bin "GrannyCraft.dll"), (Join-Path $Bin "GrannyCraftNative.dll") (Join-Path $Game "BepInEx\plugins\GrannyCraft") -Force
-    Copy-Item (Join-Path $Bin $ModJar) (Join-Path $Instance "minecraft\mods") -Force
+    $state = Read-State
+    if ($state -and $state.mode -eq "prism") { $mods = Join-Path $Instance "minecraft\mods" } else { $mods = $McMods }
+    Get-ChildItem $mods -Filter "grannycraft-*.jar" | Remove-Item -Force
+    Copy-Item (Join-Path $Bin $ModJar) $mods -Force
 }
 Write-Host "built into $Bin" -ForegroundColor Green

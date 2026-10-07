@@ -5,12 +5,14 @@ import grannycraft.WorldBridge;
 import java.util.List;
 import java.util.Optional;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.client.CloudStatus;
 import net.minecraft.client.InactivityFpsLimit;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.OptionInstance;
 import net.minecraft.client.Options;
 import net.minecraft.client.gui.screens.DeathScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -144,26 +146,43 @@ public class GrannyCraftClient implements ClientModInitializer {
 		}
 	}
 
-	/** Settings for sitting behind Granny: keep running unfocused, no sky/cloud/bobbing effects in the picture. */
+	/** The player's own values of the options changed below: put back (and saved) when Minecraft closes. */
+	private static final List<Runnable> RESTORE = new java.util.ArrayList<>();
+
+	private static <T> void set(final OptionInstance<T> option, final T value) {
+		T old = option.get();
+		RESTORE.add(() -> option.set(old));
+		option.set(value);
+	}
+
+	/**
+	 * Settings for sitting behind Granny: keep running unfocused, no sky/cloud/bobbing effects in the picture. Only for
+	 * this session: the game folder may be the player's normal one, so their own settings come back when Minecraft closes.
+	 */
 	private static void configure(final Options options) {
+		boolean pause = options.pauseOnLostFocus;
+		RESTORE.add(() -> options.pauseOnLostFocus = pause);
 		options.pauseOnLostFocus = false;
 		options.onboardAccessibility = false;
 		options.tutorialStep = TutorialSteps.NONE;
-		options.cloudStatus().set(CloudStatus.OFF);
-		options.bobView().set(false);
-		options.vignette().set(false);
-		options.improvedTransparency().set(false);
-		options.inactivityFpsLimit().set(InactivityFpsLimit.MINIMIZED);
-		options.fovEffectScale().set(0.0);
-		options.damageTiltStrength().set(0.0);
-		options.menuBackgroundBlurriness().set(0);
-		options.enableVsync().set(false);
+		set(options.cloudStatus(), CloudStatus.OFF);
+		set(options.bobView(), false);
+		set(options.vignette(), false);
+		set(options.improvedTransparency(), false);
+		set(options.inactivityFpsLimit(), InactivityFpsLimit.MINIMIZED);
+		set(options.fovEffectScale(), 0.0);
+		set(options.damageTiltStrength(), 0.0);
+		set(options.menuBackgroundBlurriness(), 0);
+		set(options.enableVsync(), false);
 		// Minecraft's frame is composited into Granny's as soon as it is ready: the faster it comes, the less it lags
-		options.framerateLimit().set(240);
-		options.renderDistance().set(8);
+		set(options.framerateLimit(), 240);
+		set(options.renderDistance(), 8);
 		// Minecraft's sounds (swings, blocks, TNT) stay; its music would fight Granny's horror ambience
-		options.getSoundSourceOptionInstance(net.minecraft.sounds.SoundSource.MUSIC).set(0.0);
-		options.save();
+		set(options.getSoundSourceOptionInstance(net.minecraft.sounds.SoundSource.MUSIC), 0.0);
+		ClientLifecycleEvents.CLIENT_STOPPING.register(minecraft -> {
+			RESTORE.forEach(Runnable::run);
+			minecraft.options.save();
+		});
 	}
 
 	private static void openWorld(final Minecraft minecraft) {

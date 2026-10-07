@@ -1,18 +1,25 @@
-# Shared by setup.ps1, play.ps1 and build.ps1. Everything lives inside the GrannyCraft folder.
+# Shared by setup.ps1, play.ps1, uninstall.ps1 and build.ps1.
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $Root = Split-Path $PSScriptRoot -Parent
-$Version = "0.1.0"
+$Version = "0.1.1"
 $Repo = "cabcrab/Granny-Minecraft-Passthrough"
 $Game = Join-Path $Root "game\Granny Legacy"        # a copy of Granny Legacy with BepInEx + the plugin
-$Launcher = Join-Path $Root "launcher"              # Prism Launcher, portable
-$Instance = Join-Path $Launcher "instances\GrannyCraft"
-$JavaDir = Join-Path $Root "java"
 $Bin = Join-Path $Root "bin"
 $Downloads = Join-Path $Root "downloads"
+$StateFile = Join-Path $Root "setup-state.json"
 $ModJar = "grannycraft-$Version.jar"
+# "your own launcher" mode: a Minecraft version that loads the mods from this folder only
+$VersionId = "Granny-Minecraft-Passthrough"
+$ProfileKey = "granny-minecraft-passthrough"
+$McGame = Join-Path $Root "minecraft"               # its game folder (worlds, options) in the official launcher
+$McMods = Join-Path $McGame "mods"
+# "portable Prism" mode
+$Launcher = Join-Path $Root "launcher"
+$Instance = Join-Path $Launcher "instances\GrannyCraft"
+$JavaDir = Join-Path $Root "java"
 
 # Everything is downloaded from its official source and checked against these hashes.
 $Deps = @{
@@ -27,6 +34,8 @@ $Deps = @{
 }
 
 function Step($text) { Write-Host ""; Write-Host "== $text" -ForegroundColor Cyan }
+
+function Write-Utf8($path, $text) { [IO.File]::WriteAllText($path, $text, (New-Object Text.UTF8Encoding $false)) }
 
 function Get-Dep($name) {
     $d = $Deps[$name]
@@ -55,6 +64,54 @@ function Expand-Zip($zip, $to) {
         }
     } finally { $archive.Dispose() }
 }
+
+function Read-State {
+    if (Test-Path $StateFile) { return Get-Content $StateFile -Raw | ConvertFrom-Json }
+    return $null
+}
+
+# ---------- "your own launcher" mode ----------
+
+# versions\Granny-Minecraft-Passthrough in the player's .minecraft: Fabric Loader 0.19.5 for 26.3 (the official Fabric
+# profile, shipped in scripts\) that loads mods ONLY from this folder (fabric.modsFolder), never from .minecraft\mods.
+function Write-MinecraftVersion($mcDir) {
+    $fabric = Get-Content (Join-Path $PSScriptRoot "fabric-loader-0.19.5-26.3.json") -Raw | ConvertFrom-Json
+    $fabric.id = $VersionId
+    $fabric.arguments.jvm = @($fabric.arguments.jvm) + @("-Dfabric.modsFolder=$McMods")
+    $dir = Join-Path $mcDir "versions\$VersionId"
+    New-Item -ItemType Directory -Force $dir | Out-Null
+    Write-Utf8 (Join-Path $dir "$VersionId.json") ($fabric | ConvertTo-Json -Depth 20)
+    $jar = Join-Path $dir "$VersionId.jar"
+    if (-not (Test-Path $jar)) { Write-Utf8 $jar "" }   # launchers expect a jar next to the json (Fabric's installer does the same)
+}
+
+# An installation in the official launcher's list, playing that version with this folder's minecraft\ as game folder.
+function Add-LauncherProfile($mcDir) {
+    $file = Join-Path $mcDir "launcher_profiles.json"
+    if (-not (Test-Path $file)) { return $false }
+    $backup = "$file.before-granny-passthrough"
+    if (-not (Test-Path $backup)) { Copy-Item $file $backup }
+    $json = Get-Content $file -Raw | ConvertFrom-Json
+    if (-not $json.profiles) { $json | Add-Member -NotePropertyName profiles -NotePropertyValue ([pscustomobject]@{}) -Force }
+    $now = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+    $entry = [pscustomobject]@{ name = "Granny Minecraft Passthrough"; type = "custom"; lastVersionId = $VersionId
+                                gameDir = $McGame; icon = "Furnace"; created = $now; lastUsed = $now }
+    $json.profiles | Add-Member -NotePropertyName $ProfileKey -NotePropertyValue $entry -Force
+    Write-Utf8 $file ($json | ConvertTo-Json -Depth 20)
+    return $true
+}
+
+function Remove-LauncherProfile($mcDir) {
+    $file = Join-Path $mcDir "launcher_profiles.json"
+    if (-not (Test-Path $file)) { return }
+    $json = Get-Content $file -Raw | ConvertFrom-Json
+    if ($json.profiles -and $json.profiles.PSObject.Properties[$ProfileKey]) {
+        $json.profiles.PSObject.Properties.Remove($ProfileKey)
+        Write-Utf8 $file ($json | ConvertTo-Json -Depth 20)
+    }
+}
+
+# ---------- "portable Prism" mode ----------
 
 function Find-Javaw {
     if (-not (Test-Path $JavaDir)) { return $null }
@@ -89,7 +146,11 @@ function Update-JavaPaths {
     Set-Ini (Join-Path $Instance "instance.cfg") "JavaPath" $j
 }
 
-function Test-Installed {
-    (Test-Path (Join-Path $Game "Granny Legacy.exe")) -and (Test-Path (Join-Path $Game "BepInEx\plugins\GrannyCraft\GrannyCraft.dll")) -and
-    (Test-Path (Join-Path $Launcher "prismlauncher.exe")) -and (Test-Path (Join-Path $Instance "minecraft\mods\$ModJar")) -and (Find-Javaw)
+function Test-Installed($state) {
+    if (-not $state) { return $false }
+    if (-not ((Test-Path (Join-Path $Game "Granny Legacy.exe")) -and (Test-Path (Join-Path $Game "BepInEx\plugins\GrannyCraft\GrannyCraft.dll")))) { return $false }
+    if ($state.mode -eq "prism") {
+        return (Test-Path (Join-Path $Launcher "prismlauncher.exe")) -and (Test-Path (Join-Path $Instance "minecraft\mods\$ModJar")) -and [bool](Find-Javaw)
+    }
+    return (Test-Path (Join-Path $McMods $ModJar)) -and (Test-Path (Join-Path $state.minecraftDir "versions\$VersionId\$VersionId.json"))
 }
