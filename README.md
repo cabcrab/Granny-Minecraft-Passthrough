@@ -3,9 +3,9 @@
 **Minecraft inside Granny Legacy.** The real Granny Legacy and the real Minecraft Java Edition run at the same time:
 Minecraft's picture is blended into Granny's house, so you play Granny with Steve's hands, sword, bow, blocks and TNT.
 
-> [!WARNING]
-> **Very buggy.** This is an experimental fan project: expect glitches, wrong lighting, blocks that misbehave, crashes
-> and things that just don't work. Have fun, but don't expect a polished mod.
+> [!NOTE]
+> **Experimental.** This is an experimental fan project: it works, but you may still run into some glitches or rough edges.
+> Have fun!
 
 ![Granny meets a Minecraft crossbow](docs/screenshot-granny.png)
 
