@@ -53,6 +53,8 @@ namespace GrannyCraft
         /// <summary>Everything that moves with the player: the player, every camera, the camera pivots, Granny's picking ray, items following the hand.</summary>
         private static List<Transform> GetRoots(PickRay pr)
         {
+            // a root Granny destroyed meanwhile (a camera swapped at a cutscene): look again
+            if (Roots.Exists(r => r == null)) _nextRoots = 0f;
             if (Time.unscaledTime < _nextRoots && Roots.Count > 0) return Roots;
             _nextRoots = Time.unscaledTime + 2f;
             var all = new List<Transform>();
@@ -169,10 +171,10 @@ namespace GrannyCraft
             // put away while another slot is selected
             bool away = on && _held != null && !Selected;
             if (away) Hide(); else Show();
-            BlockShoot(pr, away);
+            BlockShoot(pr, away || Menu.Open); // clicks in the creative inventory don't fire Granny's gun
 
             // Q: drop what is selected
-            if (on && Input.GetKeyDown(KeyCode.Q))
+            if (on && !Menu.Open && Input.GetKeyDown(KeyCode.Q))
             {
                 if (_held != null && Selected) FakeInput.Hold(Interact.GrannyDropKey, 0.15f, grannyOnly: true);
                 else Link.Send("{\"t\":\"key\",\"k\":\"drop\",\"down\":true}");

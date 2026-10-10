@@ -33,6 +33,11 @@ public class GrannyCraft implements ModInitializer {
 	public static Block GHOST;
 	/** Where Granny's player stands (Minecraft coordinates, feet), set by the client every tick; null when unknown. */
 	public static volatile double[] playerFeet;
+	/**
+	 * The creative inventory is open over Granny (R): the player takes items like in creative mode, on both sides
+	 * (client and integrated server share this JVM), while staying in survival for everything else.
+	 */
+	public static volatile boolean creativeMenu;
 
 	@Override
 	public void onInitialize() {
@@ -53,7 +58,10 @@ public class GrannyCraft implements ModInitializer {
 			level.getBlockState(pos).is(GHOST) && !GhostBlock.BREAKABLE ? InteractionResult.FAIL : InteractionResult.PASS);
 
 		ServerLifecycleEvents.SERVER_STARTED.register(WorldBridge::attach);
-		ServerLifecycleEvents.SERVER_STOPPING.register(server -> WorldBridge.detach());
+		ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+			NetherZone.stop(server);
+			WorldBridge.detach();
+		});
 		ServerTickEvents.END_SERVER_TICK.register(WorldBridge::tick);
 		LOG.info("grannycraft loaded");
 	}

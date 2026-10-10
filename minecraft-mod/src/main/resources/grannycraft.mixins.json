@@ -2,6 +2,6 @@
 	"required": true,
 	"package": "grannycraft.mixin",
 	"compatibilityLevel": "JAVA_25",
-	"mixins": ["ArrowAccessor", "HotbarOnlyMixin","LevelMixin", "PlayerDamageMixin", "PlayerMixin", "ServerExplosionMixin"],
+	"mixins": ["ArrowAccessor", "CreativeMenuMixin", "HotbarOnlyMixin","LevelMixin", "NetherPortalMixin", "PlayerDamageMixin", "PlayerMixin", "ServerExplosionMixin"],
 	"injectors": { "defaultRequire": 1 }
 }

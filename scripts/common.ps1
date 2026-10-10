@@ -4,7 +4,7 @@ $ProgressPreference = "SilentlyContinue"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $Root = Split-Path $PSScriptRoot -Parent
-$Version = "0.1.1"
+$Version = "0.2.0"
 $Repo = "cabcrab/Granny-Minecraft-Passthrough"
 $Game = Join-Path $Root "game\Granny Legacy"        # a copy of Granny Legacy with BepInEx + the plugin
 $Bin = Join-Path $Root "bin"

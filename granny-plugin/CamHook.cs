@@ -6,9 +6,10 @@ using UnityEngine.Rendering;
 namespace GrannyCraft
 {
     /// <summary>
-    /// Lives on Granny's player camera. Each frame: issues the compositor event with this frame's parameter slot (after
+    /// Lives on Granny's player camera. Each frame: has the compositor copy Granny's depth buffer right after her opaque
+    /// geometry (it matches the picture exactly), issues the compositor event with this frame's parameter slot (after
     /// image effects, with the camera target bound), moves the camera for third person only while it renders, and
-    /// hands the compositor this frame's depth texture and pose.
+    /// hands the compositor this frame's depth texture (the fallback) and pose.
     /// </summary>
     public class CamHook : MonoBehaviour
     {
@@ -21,6 +22,7 @@ namespace GrannyCraft
 
         private Camera _cam;
         private CommandBuffer _cb;
+        private CommandBuffer _cbDepth;
         private bool _moved;
         private Vector3 _savedPos;
         private Quaternion _savedRot;
@@ -40,6 +42,20 @@ namespace GrannyCraft
         private float _savedFov;
         private bool _fovChanged;
 
+        /// <summary>Frames drawn from Minecraft's exact camera (locked) or from Granny's own (free), for the status line.</summary>
+        public static int LockedFrames, FreeFrames;
+        private Vector4 _loggedProj;
+
+        /// <summary>Logged when it changes: Granny's projection against a plain one from her fov and aspect.</summary>
+        private void CheckProjection(Matrix4x4 proj)
+        {
+            var key = new Vector4(proj.m00, proj.m11, proj.m02, proj.m12);
+            if ((key - _loggedProj).sqrMagnitude < 1e-8f) return;
+            _loggedProj = key;
+            float py = 1f / Mathf.Tan(_cam.fieldOfView * 0.5f * Mathf.Deg2Rad), px = py / _cam.aspect;
+            Plugin.L.LogInfo($"camera projection: P00={proj.m00:F4} P11={proj.m11:F4} P02={proj.m02:F4} P12={proj.m12:F4} (plain fov {_cam.fieldOfView:F1}/aspect {_cam.aspect:F3}: {px:F4} {py:F4}) physical={_cam.usePhysicalProperties} pixelRect={_cam.pixelRect} screen={Screen.width}x{Screen.height}");
+        }
+
         public void Init(Camera cam)
         {
             _cam = cam;
@@ -47,6 +63,9 @@ namespace GrannyCraft
             _cb = new CommandBuffer();
             _cb.name = "GrannyCraft composite";
             _cam.AddCommandBuffer(CameraEvent.AfterImageEffects, _cb);
+            _cbDepth = new CommandBuffer();
+            _cbDepth.name = "GrannyCraft depth";
+            _cam.AddCommandBuffer(CameraEvent.AfterForwardOpaque, _cbDepth);
             Instance = this;
             if (_depthId < 0) _depthId = Shader.PropertyToID("_CameraDepthTexture");
             Plugin.L.LogInfo($"camera hooked: {cam.name} renderingPath={cam.actualRenderingPath} hdr={cam.allowHDR} msaa={cam.allowMSAA} near={cam.nearClipPlane} far={cam.farClipPlane} fov={cam.fieldOfView}");
@@ -56,6 +75,7 @@ namespace GrannyCraft
         {
             if (Instance == this) Instance = null;
             try { if (_cam != null && _cb != null) _cam.RemoveCommandBuffer(CameraEvent.AfterImageEffects, _cb); } catch { }
+            try { if (_cam != null && _cbDepth != null) _cam.RemoveCommandBuffer(CameraEvent.AfterForwardOpaque, _cbDepth); } catch { }
         }
 
         private void OnPreCull()
@@ -63,8 +83,11 @@ namespace GrannyCraft
             if (_cb == null) return;
             _slot = (_slot + 1) & 7;
             _cb.Clear();
+            _cbDepth?.Clear();
             if (Core.Active && Native.Loaded)
             {
+                Native.SetDepthSource(Plugin.SceneDepth.Value);
+                if (Plugin.SceneDepth.Value) _cbDepth?.IssuePluginEvent(Native.RenderEventFunc, Native.GrabDepth | _slot);
                 _cb.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
                 _cb.IssuePluginEvent(Native.RenderEventFunc, _slot);
             }
@@ -184,9 +207,16 @@ namespace GrannyCraft
                 p.lightMip = 6f;
                 p.wantSlot = _wantSlot;
                 p.wantSeq = _wantSeq;
+                p.hostDepthFlipY = Plugin.FlipGrannyDepth.Value ? 1 : 0;
+                // the projection Granny really drew with (a physical camera, a lens shift... aren't just fov and aspect)
+                Matrix4x4 proj = _cam.projectionMatrix;
+                p.projX = proj.m00; p.projY = proj.m11; p.shiftX = proj.m02; p.shiftY = proj.m12;
+                CheckProjection(proj);
                 Native.SetParams(_slot, ref p);
                 Last = p;
             }
+
+            if (Core.Active) { if (_wantSlot >= 0) LockedFrames++; else FreeFrames++; }
 
             if (_moved)
             {

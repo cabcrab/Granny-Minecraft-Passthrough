@@ -7,8 +7,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * There is no inventory screen over Granny: items only go into the 9 hotbar slots (and the off hand, where the arrows
- * are). With a full hotbar an item on the floor stays there, as with a full inventory in Minecraft.
+ * Items picked up only go into the 9 hotbar slots (and the off hand, where the arrows are): the rest of the inventory
+ * is only seen in the creative inventory (R). With a full hotbar an item on the floor stays there, as with a full
+ * inventory in Minecraft.
  */
 @Mixin(Inventory.class)
 abstract class HotbarOnlyMixin {

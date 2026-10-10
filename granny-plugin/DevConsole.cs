@@ -119,11 +119,7 @@ namespace GrannyCraft
                         var e = Core.PlayerRoot.eulerAngles;
                         Core.PlayerRoot.eulerAngles = new Vector3(e.x, P(a[1]), e.z);
                         var fps = UnityEngine.Object.FindObjectOfType<MobileFPS>();
-                        if (fps != null && a.Length > 2)
-                        {
-                            fps.cameraPitch = P(a[2]);
-                            fps.rotationX = P(a[2]);
-                        }
+                        if (fps != null && a.Length > 2) fps.rotationX = P(a[2]);
                         if (a.Length > 2) Core.Cam.transform.localEulerAngles = new Vector3(P(a[2]), 0, 0);
                         break;
                     }

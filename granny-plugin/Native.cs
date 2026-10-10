@@ -17,8 +17,10 @@ namespace GrannyCraft
             public int enabled, showWorld, showOverlay, reproject, debugView;
             public float depthBias, hostDepthScale, overlayOpacity, edgeSoftness, brightness;
             public float lightMatch, lightRef, lightMin, lightMip;
-            public int wantSlot, pad0;
+            public int wantSlot, hostDepthFlipY;
             public long wantSeq;
+            /// <summary>Granny's real projection: P00, P11, P02, P12.</summary>
+            public float projX, projY, shiftX, shiftY;
         }
 
         /// <summary>The newest complete Minecraft frame: the camera it was rendered with (Minecraft coordinates).</summary>
@@ -59,6 +61,8 @@ namespace GrannyCraft
         private delegate int TakeLogDelegate(byte[] buf, int cap);
         private delegate void CaptureDelegate([MarshalAs(UnmanagedType.LPStr)] string path);
         private static CaptureDelegate _capture;
+        private delegate void SetIntDelegate(int v);
+        private static SetIntDelegate _setDepthSource;
 
         private static GetFuncDelegate _getFunc;
         private static SetParamsDelegate _setParams;
@@ -83,6 +87,8 @@ namespace GrannyCraft
             _peek = Marshal.GetDelegateForFunctionPointer<PeekDelegate>(NativeLibrary.GetExport(lib, "GC_PeekLatest"));
             var kSize = Marshal.GetDelegateForFunctionPointer<SizeDelegate>(NativeLibrary.GetExport(lib, "GC_PeekSize"))();
             if (kSize != Marshal.SizeOf<Peek>()) throw new Exception($"native peek mismatch: {kSize} vs {Marshal.SizeOf<Peek>()}");
+            // an older GrannyCraftNative.dll doesn't have it: then it always uses _CameraDepthTexture
+            if (NativeLibrary.TryGetExport(lib, "GC_SetDepthSource", out IntPtr ds)) _setDepthSource = Marshal.GetDelegateForFunctionPointer<SetIntDelegate>(ds);
             RenderEventFunc = _getFunc();
             Loaded = true;
         }
@@ -90,6 +96,11 @@ namespace GrannyCraft
         public static void SetParams(int slot, ref Params p) { if (Loaded) _setParams(slot, ref p); }
 
         public static void Capture(string path) { if (Loaded) _capture(path); }
+
+        /// <summary>Event flag: copy Granny's depth buffer now (issued right after her opaque geometry).</summary>
+        public const int GrabDepth = 0x100;
+
+        public static void SetDepthSource(bool sceneDepth) { if (Loaded && _setDepthSource != null) _setDepthSource(sceneDepth ? 1 : 0); }
 
         public static Stats GetStats()
         {

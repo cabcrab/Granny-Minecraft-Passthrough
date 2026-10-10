@@ -2,7 +2,8 @@
 // grannycraft Fabric mod) into Granny Legacy's picture, on Unity's render thread (D3D11).
 //
 // Called from a camera CommandBuffer (CameraEvent.AfterImageEffects) through IssuePluginEvent, with the camera
-// target bound. Minecraft's world layer is drawn where it is nearer than Granny's depth (_CameraDepthTexture);
+// target bound. Minecraft's world layer is drawn where it is nearer than Granny's depth (her own depth buffer, copied
+// after her opaque geometry by a second event; _CameraDepthTexture when that isn't available);
 // Minecraft's overlay layer (hand, held item, HUD) is drawn on top of everything.
 //
 // The ray-marched re-projection (Minecraft's slightly older frame moved onto Granny's current camera) follows the
@@ -54,8 +55,9 @@ struct Params {
 	float lightMin;       // darkest gain
 	float lightMip;       // blur (mip level of Granny's picture)
 	int wantSlot;         // the Minecraft frame Granny's camera was placed for this frame (-1: the newest)
-	int pad0;
+	int hostDepthFlipY;   // Granny's depth is stored bottom-up (Unity's render textures on D3D): read it mirrored
 	int64_t wantSeq;      // that slot's sequence number when it was chosen
+	float hostProj[4];    // Granny's real projection: P00, P11, P02, P12 (0, 0, 0, 0: a plain fov/aspect one)
 };
 // the newest Minecraft frame, for Granny to render from exactly the same camera
 struct Peek {
@@ -209,12 +211,14 @@ struct CB {
 	float opts[4];       // showWorld, showOverlay, reproject, debugView
 	float opts2[4];      // overlayOpacity, srgbTarget, edgeSoftness, brightness
 	float light[4];      // lightMatch, lightRef, lightMin, lightMip
+	float hostProj[4];   // P00, P11, P02, P12 of Granny's projection
+	float extra[4];      // hostDepthFlipY
 };
 
 static const char* SHADER = R"HLSL(
 cbuffer P : register(b0) {
 	float4 McPlanes; float4 HostPlanes; float4 WarpRow0; float4 WarpRow1; float4 WarpRow2; float4 WarpTan; float4 WarpT;
-	float4 Target; float4 Opts; float4 Opts2; float4 Light;
+	float4 Target; float4 Opts; float4 Opts2; float4 Light; float4 HostProj; float4 Extra;
 };
 Texture2D HostColor : register(t4);
 Texture2D McColor : register(t0);
@@ -245,7 +249,7 @@ float3 srgb_to_linear(float3 c) { return c <= 0.04045 ? c / 12.92 : pow((c + 0.0
 float3 bands(float z) { return lerp(float3(0.1, 0.1, 0.1), float3(1.0, 0.85, 0.3), step(0.5, frac(z))) * saturate(1.5 - z / 60.0); }
 
 float4 PS(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
-	float zh = host_linear(HostDepth.SampleLevel(sPt, uv, 0));
+	float zh = host_linear(HostDepth.SampleLevel(sPt, Extra.x > 0.5 ? float2(uv.x, 1.0 - uv.y) : uv, 0));
 	float allow = HostPlanes.w;
 	float2 muv = float2(uv.x, 1.0 - uv.y); // Minecraft's rows are bottom-up
 	float zm = 1e9;
@@ -286,10 +290,14 @@ float4 PS(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
 			break;
 		}
 	}
-	if (!inside) {
-		// the march found nothing: Minecraft's frame as it is, rather than a hole in the block
-		muv = float2(uv.x, 1.0 - uv.y);
-		inside = true;
+	if (!inside || Opts.z < 0.5) {
+		// the same camera position: Granny's pixel -> its view direction through Granny's real projection -> where
+		// Minecraft (a plain perspective with its fov and aspect) drew that direction. Identical projections: same uv.
+		float2 ndc = float2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
+		float2 v = (ndc + HostProj.zw) / HostProj.xy;
+		float2 n = v / float2(WarpTan.y * WarpTan.z, WarpTan.y);
+		muv = n * 0.5 + 0.5; // Minecraft's rows are bottom-up
+		inside = all(abs(n) <= 1.0);
 	}
 	if (Opts.z < 0.5 || zm > 1e8) {
 		zm = mc_linear(McDepth.SampleLevel(sPt, muv, 0));
@@ -456,6 +464,73 @@ static bool EnsureHostDepth(ID3D11Device* dev, ID3D11Texture2D* tex) {
 	return true;
 }
 
+// ---- Granny's own depth buffer, copied right after her opaque geometry is drawn ----
+// _CameraDepthTexture comes from a separate pass that only draws materials with a ShadowCaster pass: it doesn't match
+// the picture everywhere (Minecraft then showed through parts of the house, or was cut by things nobody sees). The
+// depth buffer the picture itself was drawn with matches it exactly.
+static ID3D11Texture2D* g_sceneDepth = nullptr;
+static ID3D11ShaderResourceView* g_srvSceneDepth = nullptr;
+static D3D11_TEXTURE2D_DESC g_sceneDesc = {};
+static bool g_sceneFresh = false;         // grabbed this frame, not composited yet
+static std::atomic<int> g_depthSource{1}; // 1: the scene's depth buffer, 0: _CameraDepthTexture
+static int g_sceneWarned = 0;
+
+static DXGI_FORMAT TypelessDepth(DXGI_FORMAT f) {
+	switch (f) {
+	case DXGI_FORMAT_D32_FLOAT: case DXGI_FORMAT_R32_TYPELESS: case DXGI_FORMAT_R32_FLOAT: return DXGI_FORMAT_R32_TYPELESS;
+	case DXGI_FORMAT_D24_UNORM_S8_UINT: case DXGI_FORMAT_R24G8_TYPELESS: return DXGI_FORMAT_R24G8_TYPELESS;
+	case DXGI_FORMAT_D32_FLOAT_S8X24_UINT: case DXGI_FORMAT_R32G8X24_TYPELESS: return DXGI_FORMAT_R32G8X24_TYPELESS;
+	case DXGI_FORMAT_D16_UNORM: case DXGI_FORMAT_R16_TYPELESS: return DXGI_FORMAT_R16_TYPELESS;
+	default: return DXGI_FORMAT_UNKNOWN;
+	}
+}
+
+static void GrabSceneDepth(ID3D11DeviceContext* ctx) {
+	g_sceneFresh = false;
+	if (!g_dev || g_depthSource.load() == 0) return;
+	ID3D11RenderTargetView* rtv = nullptr;
+	ID3D11DepthStencilView* dsv = nullptr;
+	ctx->OMGetRenderTargets(1, &rtv, &dsv);
+	SafeRelease(rtv);
+	if (!dsv) {
+		if (!(g_sceneWarned & 1)) { g_sceneWarned |= 1; Log("scene depth: no depth buffer bound, using _CameraDepthTexture"); }
+		return;
+	}
+	ID3D11Resource* res = nullptr;
+	dsv->GetResource(&res);
+	dsv->Release();
+	D3D11_TEXTURE2D_DESC td;
+	((ID3D11Texture2D*)res)->GetDesc(&td);
+	DXGI_FORMAT typeless = TypelessDepth(td.Format);
+	if (td.SampleDesc.Count != 1 || td.ArraySize != 1 || typeless == DXGI_FORMAT_UNKNOWN) {
+		if (!(g_sceneWarned & 2)) { g_sceneWarned |= 2; Log("scene depth: fmt=%d samples=%u not copyable, using _CameraDepthTexture", (int)td.Format, td.SampleDesc.Count); }
+		res->Release();
+		return;
+	}
+	if (!g_sceneDepth || g_sceneDesc.Width != td.Width || g_sceneDesc.Height != td.Height || g_sceneDesc.Format != td.Format) {
+		SafeRelease(g_srvSceneDepth);
+		SafeRelease(g_sceneDepth);
+		D3D11_TEXTURE2D_DESC d = {};
+		d.Width = td.Width; d.Height = td.Height; d.MipLevels = 1; d.ArraySize = 1; d.Format = typeless;
+		d.SampleDesc.Count = 1; d.Usage = D3D11_USAGE_DEFAULT; d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		D3D11_SHADER_RESOURCE_VIEW_DESC sd = {};
+		sd.Format = DepthSrvFormat(typeless); sd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D; sd.Texture2D.MipLevels = 1;
+		if (FAILED(g_dev->CreateTexture2D(&d, nullptr, &g_sceneDepth)) || FAILED(g_dev->CreateShaderResourceView(g_sceneDepth, &sd, &g_srvSceneDepth))) {
+			SafeRelease(g_srvSceneDepth);
+			SafeRelease(g_sceneDepth);
+			if (!(g_sceneWarned & 4)) { g_sceneWarned |= 4; Log("scene depth: copy texture failed (fmt=%d), using _CameraDepthTexture", (int)td.Format); }
+			res->Release();
+			return;
+		}
+		g_sceneDesc = td;
+		Log("scene depth %ux%u fmt=%d", td.Width, td.Height, (int)td.Format);
+	}
+	// a depth-stencil subresource is copied whole (no box)
+	ctx->CopySubresourceRegion(g_sceneDepth, 0, 0, 0, 0, res, 0, nullptr);
+	g_sceneFresh = true;
+	res->Release();
+}
+
 // Pulls a Minecraft frame into the upload textures: the one Granny's camera was placed for if it is still intact,
 // else the newest. Returns true if there is a frame to show.
 static int g_lastSlot = -1;
@@ -575,6 +650,14 @@ static void Composite(ID3D11DeviceContext* ctx, const Params& p) {
 	cb.target[0] = (float)td.Width; cb.target[1] = (float)td.Height; cb.target[2] = 1.0f / td.Width; cb.target[3] = 1.0f / td.Height;
 	cb.opts[0] = (float)p.showWorld; cb.opts[1] = (float)p.showOverlay; cb.opts[2] = (float)p.reproject; cb.opts[3] = (float)p.debugView;
 	cb.light[0] = g_srvHostColor ? p.lightMatch : 0.0f; cb.light[1] = p.lightRef; cb.light[2] = p.lightMin; cb.light[3] = p.lightMip;
+	cb.extra[0] = p.hostDepthFlipY ? 1.0f : 0.0f;
+	if (p.hostProj[0] > 0.0f && p.hostProj[1] > 0.0f) {
+		for (int i = 0; i < 4; i++) cb.hostProj[i] = p.hostProj[i];
+	} else {
+		// a plain perspective from Granny's fov and aspect
+		cb.hostProj[1] = 1.0f / p.hostTanHalfFov;
+		cb.hostProj[0] = cb.hostProj[1] / p.hostAspect;
+	}
 	cb.opts2[0] = p.overlayOpacity; cb.opts2[1] = (srgb || floatTarget) ? 1.0f : 0.0f; cb.opts2[2] = p.edgeSoftness; cb.opts2[3] = p.brightness;
 	D3D11_MAPPED_SUBRESOURCE ms;
 	if (SUCCEEDED(ctx->Map(g_cb, 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
@@ -608,7 +691,9 @@ static void Composite(ID3D11DeviceContext* ctx, const Params& p) {
 	ctx->VSSetShader(g_vs, nullptr, 0);
 	ctx->PSSetShader(g_ps, nullptr, 0);
 	ctx->GSSetShader(nullptr, nullptr, 0); ctx->HSSetShader(nullptr, nullptr, 0); ctx->DSSetShader(nullptr, nullptr, 0);
-	ID3D11ShaderResourceView* srvs[5] = { g_srvColor, g_srvDepth, g_srvOverlay, g_srvHostDepth, g_srvHostColor };
+	ID3D11ShaderResourceView* hostDepth = g_sceneFresh && g_srvSceneDepth && g_depthSource.load() != 0 ? g_srvSceneDepth : g_srvHostDepth;
+	g_sceneFresh = false;
+	ID3D11ShaderResourceView* srvs[5] = { g_srvColor, g_srvDepth, g_srvOverlay, hostDepth, g_srvHostColor };
 	ctx->PSSetShaderResources(0, 5, srvs);
 	ID3D11SamplerState* samps[2] = { g_sampLinear, g_sampPoint };
 	ctx->PSSetSamplers(0, 2, samps);
@@ -699,7 +784,17 @@ static bool NextCapture() {
 	return true;
 }
 
+// event GC_GRAB_DEPTH | slot: right after Granny's opaque geometry (CameraEvent.AfterForwardOpaque), copy her depth
+static const int GC_GRAB_DEPTH = 0x100;
+
 static void __stdcall OnRenderEvent(int eventId) {
+	if (eventId & GC_GRAB_DEPTH) {
+		if (!g_dev) return; // the first composite finds the device
+		ID3D11DeviceContext* gctx = nullptr;
+		g_dev->GetImmediateContext(&gctx);
+		if (gctx) { GrabSceneDepth(gctx); gctx->Release(); }
+		return;
+	}
 	Params p;
 	{
 		std::lock_guard<std::mutex> lock(g_paramLock);
@@ -750,6 +845,9 @@ EXPORT void GC_PeekLatest(Peek* out) {
 }
 
 EXPORT int GC_PeekSize() { return (int)sizeof(Peek); }
+
+// 1: test Minecraft against the depth buffer Granny's picture was drawn with (default), 0: against _CameraDepthTexture
+EXPORT void GC_SetDepthSource(int source) { g_depthSource.store(source); }
 
 EXPORT int GC_ParamsSize() { return (int)sizeof(Params); }
 EXPORT int GC_StatsSize() { return (int)sizeof(Stats); }

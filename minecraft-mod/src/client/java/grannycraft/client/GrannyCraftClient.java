@@ -55,6 +55,8 @@ public class GrannyCraftClient implements ClientModInitializer {
 		"gamerule show_advancement_messages false",
 		"gamerule player_movement_check false",
 		"gamerule fire_spread_radius_around_player 0",
+		// a lit portal never leaves Granny's house: walking in brings the Nether here for a while (NetherZone)
+		"gamerule allow_entering_nether_using_portals false",
 		"difficulty normal",
 		"time set noon",
 		"weather clear",
@@ -69,10 +71,11 @@ public class GrannyCraftClient implements ClientModInitializer {
 		"item replace entity @a hotbar.3 with minecraft:flint_and_steel",
 		"item replace entity @a hotbar.4 with minecraft:oak_planks 64",
 		"item replace entity @a hotbar.5 with minecraft:cobblestone 64",
-		"item replace entity @a hotbar.6 with minecraft:glass 64",
+		// obsidian for a nether portal (flint and steel lights it); everything else is in the creative inventory (R)
+		"item replace entity @a hotbar.6 with minecraft:obsidian 64",
 		"item replace entity @a hotbar.7 with minecraft:crossbow[enchantments={multishot:1,quick_charge:3}]",
 		"item replace entity @a hotbar.8 with minecraft:diamond_pickaxe[enchantments={efficiency:5}]",
-		// no inventory over Granny: only the hotbar, and the arrows in the off hand (bow and crossbow need them)
+		// items picked up only go to the hotbar (and the arrows in the off hand, for bow and crossbow)
 		"item replace entity @a weapon.offhand with minecraft:arrow 64"
 	);
 	private static boolean configured;
@@ -99,9 +102,10 @@ public class GrannyCraftClient implements ClientModInitializer {
 
 	private static int lastSel = -2, lastToken = -2;
 
-	/** Granny side needs the selection again (it reconnected). */
+	/** Granny side needs the selection again (it reconnected), and whether the creative inventory is open. */
 	public static void hotbarChanged() {
 		lastSel = lastToken = -2;
+		CreativeMenu.resend();
 	}
 
 	/** The selected slot and the slot holding Granny's item: Granny shows her item only while it is selected. */
@@ -129,6 +133,7 @@ public class GrannyCraftClient implements ClientModInitializer {
 
 	private static void tick(final Minecraft minecraft) {
 		reportHotbar(minecraft);
+		CreativeMenu.tick(minecraft);
 		// a death (TNT) would leave the death screen over Granny's picture: respawn straight away
 		if (minecraft.player != null && minecraft.gui.screen() instanceof DeathScreen && --respawnIn <= 0) {
 			respawnIn = 40;

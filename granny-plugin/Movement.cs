@@ -6,7 +6,8 @@ namespace GrannyCraft
     /// Minecraft movement for Granny's player, on Granny's own CharacterController (so crouching under tables and beds,
     /// hiding, doors and Granny's floors all still work): Minecraft speeds (walk 4.317, sprint 5.612, sneak 1.295 blocks
     /// per second), ground friction and air momentum, jumping (Space, ~1.25 blocks) with Minecraft gravity, sprint on
-    /// Ctrl, sneak = Granny's crouch on Shift, cobweb-slow in spider webs. Granny's own walking (MobileFPS) keeps the
+    /// Ctrl, sneak on Shift like Minecraft (sneaking speed, Steve crouches, no stepping off an edge; Granny's own crouch
+    /// to hide under tables and beds stays on C), cobweb-slow in spider webs. Granny's own walking (MobileFPS) keeps the
     /// mouse look but its speeds are set to 0 while this runs, and restored when the passthrough is turned off.
     /// </summary>
     internal static class Movement
@@ -21,7 +22,7 @@ namespace GrannyCraft
         private static float _savedMove, _savedSpeedMove, _savedSpeedCrouch, _savedFall, _savedStep;
         private static Vector3 _vel; // blocks per second (horizontal in Unity axes)
         private static float _vy;    // blocks per second
-        public static bool Sprinting, Moving;
+        public static bool Sprinting, Moving, Sneaking;
         public static bool Active => _on;
 
         // ---- falls: a normal jump or a short drop is not a fall in Granny (she has no jump) ----
@@ -77,7 +78,37 @@ namespace GrannyCraft
                 Plugin.L.LogInfo("Minecraft movement off (Granny's own movement restored)");
             }
             _on = on;
-            _vel = Vector3.zero; _vy = 0f;
+            _vel = Vector3.zero; _vy = 0f; Sneaking = false;
+        }
+
+        /// <summary>
+        /// Sneaking on the ground, like Minecraft: a step that would leave nothing under the player (a drop of more than
+        /// about half a block: stairs down, a table's edge, a block's edge) doesn't happen; along the edge still works.
+        /// </summary>
+        private static void KeepOnEdge(CharacterController cc, ref Vector3 move)
+        {
+            Bounds b = cc.bounds;
+            Vector3 feet = new Vector3(b.center.x, b.min.y, b.center.z);
+            float half = Mathf.Min(b.extents.x, b.extents.z) * 0.9f;
+            if (!Supported(feet, half)) return; // already over the edge (pushed, landed half on it): don't get stuck
+            if (Supported(feet + new Vector3(move.x, 0f, move.z), half)) return;
+            if (Supported(feet + new Vector3(move.x, 0f, 0f), half)) { move.z = 0f; _vel.z = 0f; }
+            else if (Supported(feet + new Vector3(0f, 0f, move.z), half)) { move.x = 0f; _vel.x = 0f; }
+            else { move.x = move.z = 0f; _vel = Vector3.zero; }
+        }
+
+        /// <summary>Ground within half a block under any part of the player's feet (Granny's floors or a Minecraft block).</summary>
+        private static bool Supported(Vector3 feet, float half)
+        {
+            float u = Coords.U, depth = 0.6f * u;
+            int mask = Scanner.Mask | (1 << Blocks.Layer);
+            for (int i = -1; i <= 1; i++)
+                for (int j = -1; j <= 1; j++)
+                {
+                    Vector3 o = feet + new Vector3(i * half, 0.1f * u, j * half);
+                    if (Physics.Raycast(o, Vector3.down, depth + 0.1f * u, mask, QueryTriggerInteraction.Ignore)) return true;
+                }
+            return false;
         }
 
         private static void Step(float dt)
@@ -87,7 +118,7 @@ namespace GrannyCraft
             // cutscenes, hiding spots, being caught: Granny locks the player
             bool locked = !_fps.AbleToMove || !_fps.isAllowedToMove || Core.PS.Killed || Core.PS.IsJumpscared
                           || Core.PS.HidingInClosets || Core.PS.InBed1 || Core.PS.InBed2 || Core.PS.InBed3 || Core.PS.InCar
-                          || Core.PS.InCoffinAttic || Core.PS.InCoffinBackyard;
+                          || Core.PS.InCoffinAttic || Core.PS.InCoffinBackyard || Menu.Open;
             float f = 0f, s = 0f;
             if (!locked)
             {
@@ -99,8 +130,9 @@ namespace GrannyCraft
             bool crouched = _crouch != null && (_crouch.isCrouching || _crouch.IsCrouched);
             // our own ground contact: Granny's controller moves the collider again after us (with zero), which resets isGrounded
             bool grounded = _grounded || cc.isGrounded;
-            Sprinting = !locked && f > 0f && !crouched && (FakeInput.Key(KeyCode.LeftControl) || FakeInput.Key(KeyCode.RightControl) || (Sprinting && FakeInput.Key(KeyCode.W)));
-            float speed = crouched ? Sneak : Sprinting ? Sprint : Walk;
+            Sneaking = !locked && (FakeInput.Key(KeyCode.LeftShift) || FakeInput.Key(KeyCode.RightShift));
+            Sprinting = !locked && f > 0f && !crouched && !Sneaking && (FakeInput.Key(KeyCode.LeftControl) || FakeInput.Key(KeyCode.RightControl) || (Sprinting && FakeInput.Key(KeyCode.W)));
+            float speed = crouched || Sneaking ? Sneak : Sprinting ? Sprint : Walk;
             if (_fps.InWeb) speed *= 0.25f; // a cobweb
 
             Transform view = Core.MainCam != null ? Core.MainCam.transform : Core.Cam.transform;
@@ -133,6 +165,7 @@ namespace GrannyCraft
             }
 
             Vector3 move = new Vector3(_vel.x, _vy, _vel.z) * Coords.U * dt;
+            if (Sneaking && grounded) KeepOnEdge(cc, ref move);
             var flags = cc.Move(move);
             _grounded = (flags & CollisionFlags.Below) != 0;
             float y = Core.PlayerRoot.position.y;

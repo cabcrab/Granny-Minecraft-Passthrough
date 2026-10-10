@@ -30,6 +30,7 @@ namespace GrannyCraft
         private static IntPtr _mcWnd;
         private static float _nextWnd;
         private static string _status = "";
+        private static float _nextLockLog;
         private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
         private static long _frame;
         private static bool _setupSent;
@@ -80,13 +81,22 @@ namespace GrannyCraft
                 if (Cam == null) return;
                 ComputeView();
                 if (Active) SendCamera();
+                Menu.LateUpdate();
                 if (Time.unscaledTime >= _nextStats)
                 {
                     _nextStats = Time.unscaledTime + 1f;
                     var log = Native.TakeLog();
                     if (log.Length > 0) Plugin.L.LogInfo("native: " + log.Trim().Replace("\n", " | "));
                     var s = Native.GetStats();
-                    _status = $"GrannyCraft {(Enabled ? "ON" : "OFF")} link={(Link.Connected ? "ok" : "--")} shm={s.shmOpen} mc={s.width}x{s.height} pub={s.published} up={s.uploaded} comp={s.composited} tgt={s.targetW}x{s.targetH} dfmt={s.depthFormat} rtv={s.rtvFormat} err={s.lastError} view={View} ghost={Scanner.Status}";
+                    int frames = CamHook.LockedFrames + CamHook.FreeFrames;
+                    int lockPct = frames > 0 ? CamHook.LockedFrames * 100 / frames : 0;
+                    _status = $"GrannyCraft {(Enabled ? "ON" : "OFF")} link={(Link.Connected ? "ok" : "--")} shm={s.shmOpen} mc={s.width}x{s.height} pub={s.published} up={s.uploaded} comp={s.composited} tgt={s.targetW}x{s.targetH} dfmt={s.depthFormat} rtv={s.rtvFormat} err={s.lastError} view={View} ghost={Scanner.Status} depth={(Plugin.SceneDepth.Value ? "scene" : "texture")} flip={(Plugin.FlipGrannyDepth.Value ? "ON" : "off")} locked={lockPct}% debug={DebugView}";
+                    if (frames > 0 && Time.unscaledTime >= _nextLockLog)
+                    {
+                        _nextLockLog = Time.unscaledTime + 10f;
+                        Plugin.L.LogInfo($"frames from Minecraft's camera: {lockPct}% ({frames} frames), depth={(Plugin.SceneDepth.Value ? "scene" : "texture")}");
+                    }
+                    CamHook.LockedFrames = CamHook.FreeFrames = 0;
                     KeepWindows();
                 }
                 DevConsole.EndFrame();
@@ -99,6 +109,7 @@ namespace GrannyCraft
 
         private void OnGUI()
         {
+            Nether.OnGUI();
             if (!_showStatus) return;
             GUI.Label(new Rect(10, 10, Screen.width - 20, 60), _status);
         }
@@ -120,7 +131,7 @@ namespace GrannyCraft
                     Plugin.L.LogInfo("player gone");
                     PS = null; Cam = null; PlayerRoot = null; CC = null;
                     Hooked.Clear();
-                    Scanner.Reset(); Enemies.Reset(); Blocks.Reset(); Movement.Reset(); GrannyHeld.Reset(); Carve.Reset();
+                    Scanner.Reset(); Enemies.Reset(); Blocks.Reset(); Movement.Reset(); GrannyHeld.Reset(); Carve.Reset(); Menu.Reset(); Nether.Reset();
                 }
                 return;
             }
@@ -234,12 +245,25 @@ namespace GrannyCraft
                 Plugin.L.LogInfo("breakable house (experimental): " + (Plugin.BreakableHouse.Value ? "on" : "off"));
             }
             if (Input.GetKeyDown(Plugin.DebugKey.Value)) DebugView = (DebugView + 1) % 4;
+            if (Input.GetKeyDown(Plugin.DepthSourceKey.Value))
+            {
+                Plugin.FlipGrannyDepth.Value = !Plugin.FlipGrannyDepth.Value;
+                Plugin.L.LogInfo("Granny's depth read " + (Plugin.FlipGrannyDepth.Value ? "upside down" : "as stored"));
+            }
             if (!Enabled || !Link.Connected || PS == null)
             {
+                if (Menu.Open)
+                {
+                    Link.Send("{\"t\":\"menu\",\"on\":false}");
+                    Menu.Reset();
+                }
                 if (DevConsole.FakePressed[0] || DevConsole.FakePressed[1]) Plugin.L.LogInfo($"input dropped: enabled={Enabled} link={Link.Connected} ps={PS != null}");
                 return;
             }
             if (Input.GetKeyDown(Plugin.ViewKey.Value)) View = (View + 1) % 3;
+            // the creative inventory (R) takes the mouse: nothing goes to Minecraft's hand meanwhile
+            Menu.Update();
+            if (Menu.Open) return;
 
             if (Plugin.ForwardMouse.Value)
             {
@@ -318,7 +342,8 @@ namespace GrannyCraft
                 Link.Send($"{{\"t\":\"view\",\"w\":{w},\"h\":{h}}}");
             }
             var ch = UnityEngine.Object.FindObjectOfType<CrouchHolder>();
-            bool crouch = ch != null && (ch.isCrouching || ch.IsCrouched);
+            // Granny's crouch (C) or Minecraft's sneak (Shift): Steve crouches either way
+            bool crouch = ch != null && (ch.isCrouching || ch.IsCrouched) || Movement.Sneaking;
             var sb = new StringBuilder(256);
             sb.Append("{\"t\":\"cam\",\"f\":").Append(++_frame)
               .Append(",\"p\":[").Append(D(mc.x)).Append(',').Append(D(mc.y)).Append(',').Append(D(mc.z))
@@ -355,9 +380,12 @@ namespace GrannyCraft
                             _sentW = _sentH = 0;
                             Scanner.Resend();
                             Carve.SendState();
+                            Nether.SendConfig();
                             break;
                         case "_disconnected":
                             Plugin.L.LogInfo("Minecraft disconnected");
+                            Menu.Reset();
+                            Nether.Reset();
                             break;
                         case "hello":
                             _mcPid = m.GetProperty("pid").GetUInt32();
@@ -381,6 +409,12 @@ namespace GrannyCraft
                             break;
                         case "explosion":
                             Effects.Explosion(m);
+                            break;
+                        case "menu":
+                            Menu.OnMenu(m);
+                            break;
+                        case "nether":
+                            Nether.OnNether(m);
                             break;
                         case "log":
                             Plugin.L.LogInfo("mc: " + m.GetProperty("m").GetString());

@@ -22,7 +22,14 @@ Minecraft's picture is blended into Granny's house, so you play Granny with Stev
   and against walls, and Granny walks around the blocks you place.
 - **Fight back:** swords, arrows, crossbows and TNT hurt Granny, Grandpa and the other creatures. They stagger, get
   knocked down and, after 3 knockdowns, stay down.
-- **Minecraft movement** (walk, sprint, jump), while you can still crouch with **C** and hide under tables and beds.
+- **Minecraft movement** (walk, sprint, jump, **sneak on Shift**: slow, Steve crouches and you don't step off edges),
+  while you can still crouch with **C** and hide under tables and beds.
+- **Creative inventory on R:** every Minecraft item, opening on the **spawn eggs**: spawn any mob in Granny's house.
+  The mouse drives it and you can type in the search tab; Steve stays in survival.
+- **Nether portal:** build an obsidian frame (obsidian is in the hotbar) and light it with flint and steel. Walk in and
+  the house around you turns into the Nether for 30 seconds: netherrack, nylium, soul sand, magma and glowstone,
+  roots, fungi and fire, spikes and hanging glowstone, ash in the air, and a crowd of nether creatures (piglins,
+  hoglins, blazes, wither skeletons...). Then everything goes back as it was.
 - Granny's items go into Minecraft's hotbar (pick up with **E**, drop with **Q**).
 - **Experimental:** break Granny's house like Minecraft blocks with your hand or tools (not TNT). Broken parts grow back
   after 30 seconds.
@@ -36,7 +43,7 @@ Minecraft's picture is blended into Granny's house, so you play Granny with Stev
 
 ## Install
 
-1. Download **`Granny-Minecraft-Passthrough-0.1.1.zip`** from [Releases](../../releases) and extract it anywhere (for
+1. Download **`Granny-Minecraft-Passthrough-0.2.0.zip`** from [Releases](../../releases) and extract it anywhere (for
    example to your Desktop).
 2. Double-click **`Setup.bat`**. It finds Granny Legacy in your Steam libraries (or asks you for its folder) and
    asks how you start Minecraft:
@@ -80,19 +87,23 @@ the folder. Granny Legacy keeps its own settings and saves in the usual place, a
 | Right click | Minecraft use: place blocks, bow, crossbow, flint and steel on TNT. Also opens doors when Granny shows the door prompt. |
 | E | Granny's interaction: open doors, pick up Granny's items |
 | Q | drop the selected item (a Minecraft item, or Granny's item if that slot is selected) |
-| 1-9, mouse wheel | Minecraft hotbar (there is no inventory screen, only the hotbar) |
+| 1-9, mouse wheel | Minecraft hotbar (items you pick up only go there) |
+| R | creative inventory (spawn eggs first). R again or Escape closes it |
 | W A S D, Space, Ctrl | Minecraft movement: walk, jump, sprint |
+| Shift | sneak like Minecraft |
 | C | crouch (hide under tables and beds) |
 | F5 | first person / third person behind / third person in front |
 | F8 | passthrough on/off (off = plain Granny) |
 | F10 | breakable house on/off |
 | F7 / F9 | compositor debug view / status line |
+| F6 | reads Granny's depth upside down or not (on by default: only if Minecraft hides behind things that aren't there) |
 
 ## Settings
 
 After the first start: `game\Granny Legacy\BepInEx\config\grannycraft.passthrough.cfg` (open it with Notepad).
-It covers keys, block scale (`BlocksPerUnit`), creature health, knockdowns, lighting, the breakable house and its
-regrow time (`HouseRegenSeconds`).
+It covers keys, block scale (`BlocksPerUnit`, bigger = smaller blocks), creature health, knockdowns, lighting, the
+breakable house and its regrow time (`HouseRegenSeconds`), and the Nether (`NetherSeconds`, `NetherRadius`, and
+`NetherTint` for the red tint, 0 = none).
 
 ## Troubleshooting
 
@@ -113,9 +124,9 @@ regrow time (`HouseRegenSeconds`).
 ## Installing the Minecraft mod by hand
 
 The Minecraft side is a normal Fabric mod, if you prefer to set it up yourself: Minecraft **26.3**, **Fabric Loader
-0.19.5**, [Fabric API](https://modrinth.com/mod/fabric-api) 0.161.0+26.3 and `bin\grannycraft-0.1.1.jar` in the mods
+0.19.5**, [Fabric API](https://modrinth.com/mod/fabric-api) 0.161.0+26.3 and `bin\grannycraft-0.2.0.jar` in the mods
 folder. Use it in a profile of its own: when Minecraft starts, the mod opens its own empty "grannycraft" world and
-replaces the inventory with the hotbar only. You still need Setup.bat for the Granny side.
+items picked up only go to the hotbar. You still need Setup.bat for the Granny side.
 
 ## How it works
 

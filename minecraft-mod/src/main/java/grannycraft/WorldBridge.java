@@ -76,6 +76,10 @@ public final class WorldBridge {
 					if (state.is(GrannyCraft.GHOST)) {
 						level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
 						cleared++;
+					} else if (NetherZone.owns(pos)) {
+						GhostBlock.REPLACED.remove(pos.asLong());
+						NetherZone.houseGone(level, pos.immutable()); // the Nether's skin on a door that opened
+						cleared++;
 					}
 				}
 			}
@@ -95,12 +99,25 @@ public final class WorldBridge {
 		s.execute(() -> s.getCommands().performPrefixedCommand(s.createCommandSourceStack().withSuppressedOutput(), command));
 	}
 
+	/** Block changes that aren't news to Granny (the Nether zone's skin on her house): not reported, no carving. */
+	static void quietly(final Runnable change) {
+		boolean was = placingGhosts;
+		placingGhosts = true;
+		try {
+			change.run();
+		} finally {
+			placingGhosts = was;
+		}
+	}
+
 	static void tick(final MinecraftServer s) {
 		flush();
 		if (GrannyCraft.active) {
 			reportArrows(s.overworld());
 			pickUp(s);
 		}
+
+		NetherZone.tick(s);
 	}
 
 	/**
@@ -276,6 +293,7 @@ public final class WorldBridge {
 			int minX = -48, minY = 20, minZ = -48, maxX = 48, maxY = 100, maxZ = 48;
 
 			int removed = 0;
+			NetherZone.reset(); // its blocks and creatures go with everything else below
 			GhostBlock.MASKS.clear();
 			GhostBlock.BROKEN.clear();
 			GhostBlock.REPLACED.clear();

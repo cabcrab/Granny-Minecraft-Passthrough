@@ -65,13 +65,8 @@ namespace GrannyCraft
             return false;
         }
 
-        [HarmonyPatch(typeof(MobileFPS), nameof(MobileFPS.Update))]
-        [HarmonyPostfix]
-        private static void FpsUpdate(MobileFPS __instance)
-        {
-            if (!Quiet) return;
-            __instance.isFallingOrLanding = false;
-            __instance.fallingDuration = 0f;
-        }
+        // Older Granny Legacy builds also kept a fall state on MobileFPS (isFallingOrLanding, fallingDuration), quieted
+        // here after its Update. Current builds keep it only in FallingHolder: that patch every frame threw
+        // MissingMethodException, so it is gone.
     }
 }

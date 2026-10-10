@@ -32,6 +32,12 @@ namespace GrannyCraft
             try { return Input.GetKey(k); } finally { _own--; }
         }
 
+        public static bool KeyDown(KeyCode k)
+        {
+            _own++;
+            try { return Input.GetKeyDown(k); } finally { _own--; }
+        }
+
         public static void Hold(KeyCode k, float seconds, bool grannyOnly = false)
         {
             HeldUntil[k] = Time.unscaledTime + seconds + 0.05f;
@@ -58,7 +64,7 @@ namespace GrannyCraft
         private static void Filter(KeyCode key, ref bool result, bool fake)
         {
             // a real press of a key taken from Granny: not for her (the mod's own reads still get it)
-            if (result && _own == 0 && TakenFromGranny.Contains(key) && Core.Enabled) result = false;
+            if (result && _own == 0 && Core.Enabled && (TakenFromGranny.Contains(key) || Menu.HidesFromGranny(key))) result = false;
             if (!result && fake) result = true;
         }
 
@@ -85,6 +91,8 @@ namespace GrannyCraft
         [HarmonyPostfix]
         private static void GetAxis(string axisName, ref float __result)
         {
+            // the creative inventory has the mouse: Granny's camera doesn't turn
+            if (Menu.Open && axisName.StartsWith("Mouse")) { __result = 0f; return; }
             // Minecraft movement moves the player itself: Granny's own walking reads no input then
             if (Movement.Active && (axisName == "Vertical" || axisName == "Horizontal")) { __result = 0f; return; }
             float a = Axis(axisName); if (a != 0f) __result = a;
@@ -94,6 +102,7 @@ namespace GrannyCraft
         [HarmonyPostfix]
         private static void GetAxisRaw(string axisName, ref float __result)
         {
+            if (Menu.Open && axisName.StartsWith("Mouse")) { __result = 0f; return; }
             if (Movement.Active && (axisName == "Vertical" || axisName == "Horizontal")) { __result = 0f; return; }
             float a = Axis(axisName); if (a != 0f) __result = a;
         }
