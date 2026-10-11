@@ -386,6 +386,7 @@ namespace GrannyCraft
                             Plugin.L.LogInfo("Minecraft disconnected");
                             Menu.Reset();
                             Nether.Reset();
+                            Enemies.ClearMobs();
                             break;
                         case "hello":
                             _mcPid = m.GetProperty("pid").GetUInt32();
@@ -406,6 +407,12 @@ namespace GrannyCraft
                             break;
                         case "proj":
                             Enemies.OnProjectiles(m);
+                            break;
+                        case "mobs":
+                            Enemies.OnMobs(m);
+                            break;
+                        case "hurt":
+                            Enemies.OnHurt(m);
                             break;
                         case "explosion":
                             Effects.Explosion(m);

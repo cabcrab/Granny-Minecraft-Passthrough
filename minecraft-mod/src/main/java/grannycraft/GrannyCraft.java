@@ -6,12 +6,15 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
+import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.PushReaction;
@@ -51,6 +54,18 @@ public class GrannyCraft implements ModInitializer {
 			.pushReaction(PushReaction.IMMOVEABLE)
 			.isSuffocating((s, l, p) -> false)
 			.isViewBlocking((s, l, p, a) -> false)));
+
+		// Granny and Grandpa as Minecraft sees them: what hostile mobs chase and hit (StandIn)
+		ResourceKey<EntityType<?>> standIn = ResourceKey.create(Registries.ENTITY_TYPE, Identifier.fromNamespaceAndPath(ID, "stand_in"));
+		StandIn.TYPE = Registry.register(BuiltInRegistries.ENTITY_TYPE, standIn, EntityType.Builder.<StandIn>of(StandIn::new, MobCategory.MISC)
+			.sized(0.6F, 1.8F)
+			.noSave()
+			.noSummon()
+			.fireImmune()
+			.noLootTable()
+			.clientTrackingRange(10)
+			.build(standIn));
+		FabricDefaultAttributeRegistry.register(StandIn.TYPE, StandIn.attributes());
 
 		// Granny's walls can't be broken, unless the (experimental) breakable house is on
 		PlayerBlockBreakEvents.BEFORE.register((level, player, pos, state, be) -> !state.is(GHOST) || GhostBlock.BREAKABLE);

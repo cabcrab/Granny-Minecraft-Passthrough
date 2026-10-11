@@ -34,7 +34,8 @@ import org.joml.Vector4f;
  * GPU buffers, published when the GPU fence passes (next frame at the latest).
  */
 public final class FrameExporter {
-	public static final String NAME = "Local\\GrannyCraftFrame";
+	/** -Dgrannycraft.shm=... gives a second (test) Minecraft its own, so it never draws into a running game. */
+	public static final String NAME = System.getProperty("grannycraft.shm", "Local\\GrannyCraftFrame");
 	private static final int MAGIC = 0x5450434D;
 	private static final int VERSION = 1;
 	private static final int HEADER = 4096;

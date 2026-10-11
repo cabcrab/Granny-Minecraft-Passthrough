@@ -17,7 +17,7 @@ namespace GrannyCraft
     /// stun). At zero: knocked down (the game's own knock-out ragdoll; they come back after the game's recover timer
     /// with full health). The third knockdown kills them for good. Smaller creatures die at zero.
     /// </summary>
-    internal static class Enemies
+    internal static partial class Enemies
     {
         private class Enemy
         {
@@ -37,6 +37,11 @@ namespace GrannyCraft
             public float ShowHpUntil;
             public bool Staggered;
             public float SavedCatch = -1f;
+            // fighting Minecraft's mobs (Mobs.cs)
+            public bool Brawling;
+            public int BrawlTarget;
+            public float BrawlSince, NextSwing, SwingUntil, NextPath;
+            public string CurrentAnim;
         }
 
         private static readonly Dictionary<int, Enemy> All = new Dictionary<int, Enemy>();
@@ -47,6 +52,7 @@ namespace GrannyCraft
         {
             All.Clear();
             _ec = null;
+            ClearMobs();
         }
 
         public static IEnumerable<int> Layers()
@@ -218,12 +224,7 @@ namespace GrannyCraft
                 }
                 EndStagger(e);
             }
-        }
-
-        public static bool IsStaggered(GameObject go)
-        {
-            if (go == null || All.Count == 0) return false;
-            return All.TryGetValue(go.GetInstanceID(), out var e) && e.Staggered && Time.time < e.StaggerUntil;
+            UpdateMobs();
         }
 
         private static void EndStagger(Enemy e)

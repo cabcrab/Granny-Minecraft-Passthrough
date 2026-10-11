@@ -16,6 +16,10 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.monster.Enemy;
+import net.minecraft.world.phys.AABB;
 
 /** Server side: Granny's geometry as ghost blocks, Minecraft block changes and explosions back to Granny, commands. */
 public final class WorldBridge {
@@ -62,7 +66,10 @@ public final class WorldBridge {
 				long mask = (cells[i + 3] & 0xFFFFFFFFL) | (cells[i + 4] << 32);
 				BlockState state = level.getBlockState(pos);
 				if (mask != 0L) {
-					GhostBlock.MASKS.put(pos.asLong(), mask);
+					Long was = GhostBlock.MASKS.put(pos.asLong(), mask);
+					if (was != null && was != mask && state.is(GrannyCraft.GHOST)) {
+						level.getPathTypeCache().invalidate(pos); // same block, new shape (a door moved): mobs path anew
+					}
 					if (!state.isAir() && !state.is(GrannyCraft.GHOST)) {
 						GhostBlock.REPLACED.add(pos.asLong()); // a Minecraft block is there (built in a hole): house again when it goes
 					}
@@ -115,6 +122,9 @@ public final class WorldBridge {
 		if (GrannyCraft.active) {
 			reportArrows(s.overworld());
 			pickUp(s);
+			if (s.getTickCount() % 2 == 0) {
+				reportMobs(s.overworld());
+			}
 		}
 
 		NetherZone.tick(s);
@@ -364,4 +374,114 @@ public final class WorldBridge {
 				center.x, center.y, center.z, radius, source));
 		}
 	}
+
+	/** Granny and Grandpa in Minecraft, by Granny's id for them (server thread only). */
+	private static final Map<Integer, StandIn> standIns = new java.util.HashMap<>();
+
+	/**
+	 * {"t":"standins","s":[[id,"granny",x,y,z,width,height,yaw],...]}: where Granny and Grandpa stand (only while they
+	 * are up and about). Their stand-ins follow; one no longer sent goes (StandIn.tick also drops it on its own).
+	 */
+	public static void standIns(final com.google.gson.JsonArray list) {
+		MinecraftServer s = server;
+		if (s == null) {
+			return;
+		}
+
+		s.execute(() -> {
+			ServerLevel level = s.overworld();
+			java.util.Set<Integer> sent = new java.util.HashSet<>();
+			for (com.google.gson.JsonElement el : list) {
+				com.google.gson.JsonArray a = el.getAsJsonArray();
+				int id = a.get(0).getAsInt();
+				sent.add(id);
+				double x = a.get(2).getAsDouble(), y = a.get(3).getAsDouble(), z = a.get(4).getAsDouble();
+				StandIn st = standIns.get(id);
+				if (!level.isPositionEntityTicking(BlockPos.containing(x, y, z))) {
+					sent.remove(id); // not loaded around there (yet): it would be unloaded right away
+					continue;
+				}
+
+				if (st == null || st.isRemoved()) {
+					st = new StandIn(StandIn.TYPE, level);
+					st.hostId = id;
+					st.kind = a.get(1).getAsString();
+					st.resize(a.get(5).getAsFloat(), a.get(6).getAsFloat());
+					st.snapTo(x, y, z, a.get(7).getAsFloat(), 0.0F);
+					st.seen = st.tickCount;
+					level.addFreshEntity(st);
+					standIns.put(id, st);
+					GrannyCraft.LOG.info("{} stands in Minecraft at {}", st.kind, st.blockPosition());
+				} else {
+					st.resize(a.get(5).getAsFloat(), a.get(6).getAsFloat());
+					st.snapTo(x, y, z, a.get(7).getAsFloat(), 0.0F);
+					st.setYHeadRot(a.get(7).getAsFloat());
+					st.seen = st.tickCount;
+				}
+			}
+
+			standIns.entrySet().removeIf(e -> {
+				if (sent.contains(e.getKey()) && !e.getValue().isRemoved()) {
+					return false;
+				}
+
+				e.getValue().discard();
+				return true;
+			});
+		});
+	}
+
+	/** Server thread: a mob hit Granny's stand-in. {"t":"hurt","id":Granny's id,"d":damage,"by":mob type,"from":[x,y,z]} */
+	static void standInHurt(final StandIn st, final Mob by, final float amount) {
+		GrannyCraft.events.accept(String.format(Locale.ROOT, "{\"t\":\"hurt\",\"id\":%d,\"d\":%.2f,\"by\":\"%s\",\"from\":[%.3f,%.3f,%.3f]}",
+			st.hostId, amount, BuiltInRegistries.ENTITY_TYPE.getKey(by.getType()).getPath(), by.getX(), by.getY(), by.getZ()));
+	}
+
+	private static boolean mobsSent;
+
+	/**
+	 * Every other tick, the hostile mobs around the player for Granny and Grandpa to fight:
+	 * {"t":"mobs","m":[[id,x,y,z,height,width,"zombie",target],...]}, target = Granny's id of the stand-in it is after (0: none).
+	 */
+	private static void reportMobs(final ServerLevel level) {
+		if (level.getServer().getPlayerList().getPlayers().isEmpty()) {
+			return;
+		}
+
+		ServerPlayer p = level.getServer().getPlayerList().getPlayers().get(0);
+		StringBuilder b = new StringBuilder("{\"t\":\"mobs\",\"m\":[");
+		int n = 0;
+		for (Mob m : level.getEntitiesOfClass(Mob.class, new AABB(p.blockPosition()).inflate(64.0), m -> m instanceof Enemy && m.isAlive() && !(m instanceof StandIn))) {
+			int target = m.getTarget() instanceof StandIn st ? st.hostId : 0;
+			b.append(n++ == 0 ? "" : ",").append(String.format(Locale.ROOT, "[%d,%.3f,%.3f,%.3f,%.2f,%.2f,\"%s\",%d]", m.getId(), m.getX(), m.getY(), m.getZ(),
+				m.getBbHeight(), m.getBbWidth(), BuiltInRegistries.ENTITY_TYPE.getKey(m.getType()).getPath(), target));
+		}
+
+		if (n > 0 || mobsSent) {
+			mobsSent = n > 0; // an empty list once, when the last one goes
+			GrannyCraft.events.accept(b.append("]}").toString());
+		}
+	}
+
+	/** {"t":"mobhit","id":mob,"d":damage,"by":Granny's id}: Granny or Grandpa hit a mob (it fights back). */
+	public static void mobHit(final int id, final float damage, final int by) {
+		MinecraftServer s = server;
+		if (s == null) {
+			return;
+		}
+
+		s.execute(() -> {
+			ServerLevel level = s.overworld();
+			if (!(level.getEntity(id) instanceof Mob mob) || !mob.isAlive()) {
+				return;
+			}
+
+			StandIn st = standIns.get(by);
+			boolean hit = mob.hurtServer(level, st != null && !st.isRemoved() ? mob.damageSources().mobAttack(st) : mob.damageSources().generic(), damage);
+			if (hit && st != null && !st.isRemoved() && mob instanceof Enemy) {
+				mob.setTarget(st); // she hit it: it goes for her
+			}
+		});
+	}
+
 }

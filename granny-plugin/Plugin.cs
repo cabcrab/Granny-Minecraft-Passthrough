@@ -9,7 +9,7 @@ using UnityEngine;
 
 namespace GrannyCraft
 {
-    [BepInPlugin("grannycraft.passthrough", "GrannyCraft", "0.2.0")]
+    [BepInPlugin("grannycraft.passthrough", "GrannyCraft", "1.0.0")]
     public class Plugin : BasePlugin
     {
         internal static ManualLogSource L;
@@ -24,6 +24,8 @@ namespace GrannyCraft
         internal static ConfigEntry<int> Port;
         internal static ConfigEntry<float> GrannyHealth, GrandpaHealth, OtherHealth;
         internal static ConfigEntry<int> KnockdownsToKill;
+        internal static ConfigEntry<bool> FightMobs;
+        internal static ConfigEntry<float> GrannyMobDamage, GrandpaMobDamage, MobSightBlocks;
         internal static ConfigEntry<float> ScanRadius, BlocksPerUnit, FallAnimationHeight;
         internal static ConfigEntry<float> NetherSeconds, NetherTint;
         internal static ConfigEntry<int> NetherRadius;
@@ -65,6 +67,10 @@ namespace GrannyCraft
             GrandpaHealth = Config.Bind("Combat", "GrandpaHealth", 50f, "Grandpa's health");
             OtherHealth = Config.Bind("Combat", "OtherHealth", 24f, "Health of the other creatures (spider, Slendrina, ...)");
             KnockdownsToKill = Config.Bind("Combat", "KnockdownsToKill", 3, "After this many knockdowns Granny/Grandpa stay dead");
+            FightMobs = Config.Bind("Combat", "FightMobs", true, "Granny and Grandpa fight Minecraft's hostile mobs: mobs that see them go for them (before the player), and they go for the mobs they see");
+            GrannyMobDamage = Config.Bind("Combat", "GrannyMobDamage", 7f, "Damage of one of Granny's hits on a mob (a zombie has 20 health)");
+            GrandpaMobDamage = Config.Bind("Combat", "GrandpaMobDamage", 9f, "Damage of one of Grandpa's hits on a mob");
+            MobSightBlocks = Config.Bind("Combat", "MobSightBlocks", 16f, "How far (blocks) Granny and Grandpa notice a mob in sight");
             BlocksPerUnit = Config.Bind("Scale", "BlocksPerUnit", 0.7f, "Minecraft blocks per Granny unit: bigger = smaller blocks and Steve (0.43 puts Steve's eyes at the camera height)");
             ScanRadius = Config.Bind("Collision", "ScanRadius", 70f, "Radius (Granny units) around the player turned into Minecraft collision");
 

@@ -160,6 +160,8 @@ namespace GrannyCraft
                     break;
                 case "goto": Enemies.DevGoto(a[1], a.Length > 2 ? P(a[2]) : 2.5f); break;
                 case "enemies": Enemies.DevList(); break;
+                case "mob": Enemies.DevMob(a[1], a.Length > 2 ? P(a[2]) : 4f); break; // mob zombie 4: a Minecraft mob in front of the player
+                case "mobs": Enemies.DevMobs(); break;
                 case "aimat": AimAt(a[1]); break;
                 case "near": Near(a.Length > 1 ? P(a[1]) : 6f); break;
                 case "movedebug": Movement.Debug(P(a[1])); break;

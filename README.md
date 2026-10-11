@@ -22,6 +22,10 @@ Minecraft's picture is blended into Granny's house, so you play Granny with Stev
   and against walls, and Granny walks around the blocks you place.
 - **Fight back:** swords, arrows, crossbows and TNT hurt Granny, Grandpa and the other creatures. They stagger, get
   knocked down and, after 3 knockdowns, stay down.
+- **Mobs vs Granny:** hostile mobs you spawn (zombies, skeletons, spiders, creepers, witches...) go for Granny and
+  Grandpa as soon as they see them, before you, and hurt them with Minecraft damage. Granny and Grandpa fight back:
+  they run at the mobs they see (or that are after them) and hit them until they die. Piglins and hoglins keep to
+  Minecraft's own targets.
 - **Minecraft movement** (walk, sprint, jump, **sneak on Shift**: slow, Steve crouches and you don't step off edges),
   while you can still crouch with **C** and hide under tables and beds.
 - **Creative inventory on R:** every Minecraft item, opening on the **spawn eggs**: spawn any mob in Granny's house.
@@ -43,7 +47,7 @@ Minecraft's picture is blended into Granny's house, so you play Granny with Stev
 
 ## Install
 
-1. Download **`Granny-Minecraft-Passthrough-0.2.0.zip`** from [Releases](../../releases) and extract it anywhere (for
+1. Download **`Granny-Minecraft-Passthrough-1.0.0.zip`** from [Releases](../../releases) and extract it anywhere (for
    example to your Desktop).
 2. Double-click **`Setup.bat`**. It finds Granny Legacy in your Steam libraries (or asks you for its folder) and
    asks how you start Minecraft:
@@ -101,7 +105,8 @@ the folder. Granny Legacy keeps its own settings and saves in the usual place, a
 ## Settings
 
 After the first start: `game\Granny Legacy\BepInEx\config\grannycraft.passthrough.cfg` (open it with Notepad).
-It covers keys, block scale (`BlocksPerUnit`, bigger = smaller blocks), creature health, knockdowns, lighting, the
+It covers keys, block scale (`BlocksPerUnit`, bigger = smaller blocks), creature health, knockdowns, mob fights
+(`FightMobs` on/off, `GrannyMobDamage`, `GrandpaMobDamage`, `MobSightBlocks`), lighting, the
 breakable house and its regrow time (`HouseRegenSeconds`), and the Nether (`NetherSeconds`, `NetherRadius`, and
 `NetherTint` for the red tint, 0 = none).
 
@@ -124,7 +129,7 @@ breakable house and its regrow time (`HouseRegenSeconds`), and the Nether (`Neth
 ## Installing the Minecraft mod by hand
 
 The Minecraft side is a normal Fabric mod, if you prefer to set it up yourself: Minecraft **26.3**, **Fabric Loader
-0.19.5**, [Fabric API](https://modrinth.com/mod/fabric-api) 0.161.0+26.3 and `bin\grannycraft-0.2.0.jar` in the mods
+0.19.5**, [Fabric API](https://modrinth.com/mod/fabric-api) 0.161.0+26.3 and `bin\grannycraft-1.0.0.jar` in the mods
 folder. Use it in a profile of its own: when Minecraft starts, the mod opens its own empty "grannycraft" world and
 items picked up only go to the hotbar. You still need Setup.bat for the Granny side.
 
@@ -133,7 +138,8 @@ items picked up only go to the hotbar. You still need Setup.bat for the Granny s
 - **Granny side:** a BepInEx 6 plugin (C#, `granny-plugin/`) plus a small D3D11 compositor (C++, `granny-native/`).
   Every frame it reads Minecraft's colour and depth from shared memory and blends them into Granny's image against
   Granny's depth buffer. It also sends Granny's camera and house geometry to Minecraft, and turns Minecraft hits,
-  arrows and explosions into damage on Granny's creatures.
+  arrows and explosions into damage on Granny's creatures. Granny and Grandpa get unseen stand-ins in Minecraft for
+  hostile mobs to chase and hit; the plugin drives them against the mobs on Granny's NavMesh.
 - **Minecraft side:** a Fabric mod (Java, `minecraft-mod/`) that follows Granny's camera, rebuilds Granny's house as
   invisible collision blocks, exports its frames and talks to the plugin over a local WebSocket (127.0.0.1:25600).
 - Nothing from either game is included in this project: the mod only reads the games while they run.

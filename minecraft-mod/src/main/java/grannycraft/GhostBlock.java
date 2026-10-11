@@ -8,6 +8,7 @@ import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -39,6 +40,45 @@ public class GhostBlock extends Block {
 		}
 
 		return SHAPES.computeIfAbsent(mask, GhostBlock::build);
+	}
+
+	/**
+	 * How mobs' pathfinding sees this cell (WalkNodeEvaluatorMixin). Minecraft judges a block by its shape at the world
+	 * origin, which for Granny's house is nothing: every floor and wall looked like air, so mobs found no ground to walk
+	 * on and stood still. Here from the cell's own shape: blocked when something is in the middle of the cell (where a
+	 * mob's body goes) or a layer spans it from side to side (a floor, a thin wall); open when it only has bits along its
+	 * edges (a door frame, the side of a piece of furniture), so doorways stay passable.
+	 */
+	public static PathType pathType(final BlockPos pos) {
+		Long boxed = MASKS.get(pos.asLong());
+		long mask = boxed == null ? 0L : boxed;
+		if (mask == 0L) {
+			return PathType.OPEN;
+		}
+
+		for (int j = 0; j < 4; j++) {
+			// the middle 2 x 2 sub-voxels of this layer (i, k = 1..2)
+			if ((mask >>> (1 + 4 * j + 16) & 3L) != 0L || (mask >>> (1 + 4 * j + 32) & 3L) != 0L) {
+				return PathType.BLOCKED;
+			}
+
+			for (int n = 0; n < 4; n++) {
+				if ((mask >>> (4 * j + 16 * n) & 0xFL) == 0xFL) {
+					return PathType.BLOCKED; // a full row along x
+				}
+
+				boolean alongZ = true;
+				for (int k = 0; k < 4 && alongZ; k++) {
+					alongZ = (mask >>> (n + 4 * j + 16 * k) & 1L) != 0L;
+				}
+
+				if (alongZ) {
+					return PathType.BLOCKED;
+				}
+			}
+		}
+
+		return PathType.OPEN;
 	}
 
 	/** Greedy along x: runs of filled sub-voxels become one box each. */

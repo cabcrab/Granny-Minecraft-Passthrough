@@ -25,9 +25,12 @@ import org.java_websocket.server.WebSocketServer;
  * <li>{"t":"slot","n":0-8}, {"t":"scroll","d":+-1}, {"t":"hud","hidden":bool}, {"t":"view","w":px,"h":px}</li>
  * <li>{"t":"menu","on":bool} and the pointer while it is open: see {@link CreativeMenu}</li>
  * <li>{"t":"nethercfg","secs":seconds,"r":blocks}: how long and how far the Nether comes (NetherZone)</li>
+ * <li>{"t":"standins","s":[[id,kind,x,y,z,w,h,yaw],...]}: Granny and Grandpa for hostile mobs to fight (StandIn)</li>
+ * <li>{"t":"mobhit","id":mob,"d":damage,"by":id}: Granny or Grandpa hit a mob</li>
  * </ul>
  * Minecraft to host: {"t":"hello",...} on connect, {"t":"explosion","pos":[x,y,z],"r":radius},
- * {"t":"menu","on":bool}, {"t":"nether","on":bool,"secs":seconds}.
+ * {"t":"menu","on":bool}, {"t":"nether","on":bool,"secs":seconds}, {"t":"mobs","m":[...]} (hostile mobs around),
+ * {"t":"hurt","id":id,"d":damage,"by":mob,"from":[x,y,z]} (a mob hit Granny or Grandpa).
  */
 public final class HostLink extends WebSocketServer {
 	private static HostLink instance;
@@ -87,6 +90,8 @@ public final class HostLink extends WebSocketServer {
 					GrannyCraft.LOG.info("breakable house: {}", grannycraft.GhostBlock.BREAKABLE);
 				}
 				case "cmd" -> WorldBridge.command(m.get("c").getAsString());
+				case "standins" -> WorldBridge.standIns(m.getAsJsonArray("s"));
+				case "mobhit" -> WorldBridge.mobHit(m.get("id").getAsInt(), m.get("d").getAsFloat(), m.get("by").getAsInt());
 				case "nethercfg" -> {
 					grannycraft.NetherZone.seconds = Math.clamp(m.get("secs").getAsInt(), 1, 3600);
 					grannycraft.NetherZone.radius = Math.clamp(m.get("r").getAsInt(), 4, 32);

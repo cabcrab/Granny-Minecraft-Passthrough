@@ -9,6 +9,8 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
+import net.minecraft.client.renderer.entity.NoopRenderer;
 import net.minecraft.client.CloudStatus;
 import net.minecraft.client.InactivityFpsLimit;
 import net.minecraft.client.Minecraft;
@@ -86,6 +88,8 @@ public class GrannyCraftClient implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		HostLink.launch();
+		// Granny's stand-ins are never drawn: Granny herself is in the picture
+		EntityRendererRegistry.register(grannycraft.StandIn.TYPE, NoopRenderer::new);
 		ClientTickEvents.END_CLIENT_TICK.register(GrannyCraftClient::tick);
 		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> setupIn = 10);
 		ServerTickEvents.END_SERVER_TICK.register(server -> {
