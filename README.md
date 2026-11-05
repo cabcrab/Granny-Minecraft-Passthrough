@@ -1,3 +1,7 @@
+# You also might be interested in GNMP: Granny Legacy Multiplayer Mod
+https://gamejolt.com/games/GNMP/1110478
+
+
 # Granny Minecraft Passthrough
 
 **Minecraft inside Granny Legacy.** The real Granny Legacy and the real Minecraft Java Edition run at the same time:
